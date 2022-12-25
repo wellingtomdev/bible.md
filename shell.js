@@ -1,10 +1,99 @@
 
+function createDisplay() {
+    const [w, h] = process.stdout.getWindowSize()
+    const width = w
+    const height = h - 2
+    const displaySize = width * height
+    const contents = {
+        last: Array(displaySize).fill(' '),
+        current: Array(displaySize).fill(' '),
+    }
+
+    function createNewPage() {
+        const pageContent = [...contents.current]
+
+        function makeLine(line, value) {
+            const start = line * width
+            const end = start + width
+            for (let i = start; i < end; i++) {
+                pageContent[i] = value[i - start] || ' '
+            }
+            return pageContent
+        }
+
+        function render() {
+            renderContent(pageContent)
+        }
+
+        return {
+            width,
+            height,
+            makeLine,
+            render,
+        }
+
+    }
+
+
+    function renderContent(pageContent) {
+        for (let index = 0; index < displaySize; index++) {
+            const value = pageContent[index]
+            if (!comparePixels(index, value)) continue
+            const w = index % width
+            const h = Math.floor(index / width)
+            writePixel(w, h, value)
+        }
+
+        contents.last = [...contents.current]
+        contents.current = [...pageContent]
+        return [...contents.current]
+
+    }
+
+    function writePixel(w, h, value) {
+        if (!value && value !== ' ') return
+        process.stdout.cursorTo(w, h)
+        process.stdout.write(value)
+        process.stdout.cursorTo(0, height - 2)
+        return value
+    }
+
+    function comparePixels(index, value) {
+        const last = contents.current[index]
+        const current = value
+        if (typeof last === undefined) return false
+        if (typeof current === undefined) return false
+        if (last === current) return false
+        return true
+    }
+
+    function clear() {
+        console.log('\x1Bc')
+        process.stdout.cursorTo(0, 0)
+        console.log(Array(displaySize).fill(' ').join(''))
+    }
+
+    clear()
+
+    return {
+        width,
+        height,
+        createNewPage,
+        clear,
+    }
+
+}
+
+
 function startListen() {
 
     let selectedCallback = () => { }
     let selectedOption = 0
     let options = []
     let isListening = true
+    const display = createDisplay()
+    const page = display.createNewPage()
+
 
     const methods = {
         '\u0003': () => { process.exit() },
@@ -34,12 +123,8 @@ function startListen() {
 
     function renderOptions() {
         if (!isListening) { return }
-        const height = process.stdout.getWindowSize()[1] - 3
-        let contents = ''
-        function printContent(content) {
-            contents += content + '\n'
-        }
-        printContent(`Selected: ${options[selectedOption].tag}`)
+        const height = page.height - 1
+        page.makeLine(0, `Selected: ${options[selectedOption].tag}                                `)
         function getIndexOption(line) {
             const midIndex = Math.floor(height / 2)
             if (selectedOption < midIndex) {
@@ -54,17 +139,16 @@ function startListen() {
             const indexOption = getIndexOption(line)
             const option = options[indexOption]
             if (!option) {
-                printContent('')
+                page.makeLine(line + 1, '')
                 continue
             }
             if (indexOption === selectedOption) {
-                printContent(`> ${options[indexOption].tag}`)
+                page.makeLine(line + 1, `> ${option.tag}`)
             } else {
-                printContent(`  ${options[indexOption].tag}`)
+                page.makeLine(line + 1, `  ${option.tag}`)
             }
         }
-        console.log('\x1Bc')
-        console.log(contents)
+        page.render()
     }
 
     process.stdin.setRawMode(true)
